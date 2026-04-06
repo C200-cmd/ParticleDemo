@@ -1,0 +1,19 @@
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependencies (if any future npm packages)
+node_modules/
+
+# Build outputs
+dist/
+build/

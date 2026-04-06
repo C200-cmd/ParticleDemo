@@ -1,0 +1,398 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Rajdhani', sans-serif;
+    background: #0a0a0f;
+    overflow: hidden;
+    color: #fff;
+}
+
+#canvas-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* 右侧控制面板 */
+.control-panel {
+    position: fixed;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 200px;
+    background: rgba(10, 10, 20, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.control-panel h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 16px;
+    margin-bottom: 20px;
+    text-align: center;
+    background: linear-gradient(135deg, #00ffff, #ff00ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.preset-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.preset-btn {
+    padding: 10px 8px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.preset-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(0, 255, 255, 0.5);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+}
+
+.preset-btn.active {
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(255, 0, 255, 0.2));
+    border-color: #00ffff;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+}
+
+.control-group {
+    margin-bottom: 18px;
+}
+
+.control-group label {
+    display: block;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.control-group label span {
+    float: right;
+    color: #00ffff;
+    font-weight: 700;
+}
+
+.control-group input[type="color"] {
+    width: 100%;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: transparent;
+}
+
+.control-group input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.control-group input[type="color"]::-webkit-color-swatch {
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.control-group input[type="range"] {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    outline: none;
+}
+
+.control-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background: linear-gradient(135deg, #00ffff, #ff00ff);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    transition: transform 0.2s;
+}
+
+.control-group input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* 摄像头窗口 */
+.camera-window {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    width: 240px;
+    height: 180px;
+    background: rgba(10, 10, 20, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    transition: all 0.3s ease;
+}
+
+.camera-window.small {
+    width: 160px;
+    height: 120px;
+}
+
+.camera-window.mini {
+    width: 120px;
+    height: 90px;
+}
+
+.camera-window.hidden {
+    display: none;
+}
+
+.camera-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.camera-header span {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.camera-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.camera-btn {
+    width: 24px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.camera-btn:hover {
+    background: rgba(0, 255, 255, 0.3);
+}
+
+#camera-video {
+    width: 100%;
+    height: calc(100% - 36px);
+    object-fit: cover;
+    transform: scaleX(-1);
+}
+
+.hand-status {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    padding: 4px 10px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 10px;
+    color: #00ffff;
+    white-space: nowrap;
+}
+
+.hand-status.active {
+    color: #00ff00;
+}
+
+/* 全屏按钮 */
+.fullscreen-btn {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    width: 48px;
+    height: 48px;
+    background: rgba(10, 10, 20, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.fullscreen-btn:hover {
+    background: rgba(0, 255, 255, 0.2);
+    border-color: rgba(0, 255, 255, 0.5);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+/* 加载界面 */
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #0a0a0f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.5s ease;
+}
+
+.loading-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loader {
+    text-align: center;
+}
+
+.particle-loader {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+    position: relative;
+}
+
+.particle-loader::before,
+.particle-loader::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.particle-loader::before {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #00ffff, #ff00ff);
+    animation-delay: 0s;
+}
+
+.particle-loader::after {
+    width: 60%;
+    height: 60%;
+    top: 20%;
+    left: 20%;
+    background: #0a0a0f;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.7;
+    }
+}
+
+.loader p {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+    letter-spacing: 2px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .control-panel {
+        right: 10px;
+        top: auto;
+        bottom: 10px;
+        transform: none;
+        width: calc(100% - 20px);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 16px;
+    }
+
+    .control-panel h2 {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .preset-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .preset-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .control-group {
+        flex: 1;
+        min-width: 120px;
+        margin-bottom: 0;
+    }
+
+    .camera-window {
+        left: 10px;
+        bottom: auto;
+        top: 10px;
+        width: 150px;
+        height: 112px;
+    }
+
+    .camera-window.small {
+        width: 100px;
+        height: 75px;
+    }
+
+    .camera-window.mini {
+        width: 70px;
+        height: 52px;
+    }
+
+    .fullscreen-btn {
+        right: 10px;
+        bottom: auto;
+        top: 10px;
+        width: 40px;
+        height: 40px;
+    }
+}
