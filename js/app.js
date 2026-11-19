@@ -408,8 +408,46 @@ function setupPostProcessing() {
 }
 
 // ============== MediaPipe ==============
+
+// 移动端检测
+const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || window.matchMedia('(max-width: 768px)').matches;
+
+// 移动端优化参数
+const CAMERA_WIDTH = isMobileDevice ? 320 : 640;
+const CAMERA_HEIGHT = isMobileDevice ? 240 : 480;
+const HAND_MODEL_COMPLEXITY = isMobileDevice ? 0 : 1; // 0=lite模型快 1=完整模型准
+const HAND_MIN_DETECTION = isMobileDevice ? 0.5 : 0.7;
+const HAND_MIN_TRACKING = isMobileDevice ? 0.4 : 0.5;
+
+// MediaPipe CDN：优先 jsdelivr（国内手机网络更快），unpkg 作为兜底
+const MP_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240';
+
+// 帧处理节流：防止手机端帧堆积
+let isProcessingHandFrame = false;
+
 async function setupMediaPipe() {
     videoElement = document.getElementById('camera-video');
+    const statusEl = document.getElementById('hand-status');
+
+    // iOS Safari 需要用户手势才能启动摄像头，先挂一次性触摸监听
+    if (isMobileDevice && /iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        statusEl.textContent = '点击页面任意位置启用手势';
+        return new Promise((resolve) => {
+            const startOnTouch = () => {
+                document.removeEventListener('touchstart', startOnTouch);
+                document.removeEventListener('click', startOnTouch);
+                _setupMediaPipeCore().then(resolve);
+            };
+            document.addEventListener('touchstart', startOnTouch, { once: true });
+            document.addEventListener('click', startOnTouch, { once: true });
+        });
+    }
+
+    return _setupMediaPipeCore();
+}
+
+async function _setupMediaPipeCore() {
     const statusEl = document.getElementById('hand-status');
 
     // Check if MediaPipe is loaded
@@ -419,26 +457,32 @@ async function setupMediaPipe() {
         console.warn('MediaPipe scripts not loaded yet, waiting...');
         statusEl.textContent = '正在加载手势追踪...';
 
-        // Wait up to 10 seconds for scripts to load
+        // 等待脚本加载，移动端给更长时间
         let waited = 0;
-        while ((typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') && waited < 10000) {
+        const maxWait = isMobileDevice ? 15000 : 10000;
+        while ((typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') && waited < maxWait) {
             await new Promise(r => setTimeout(r, 500));
             waited += 500;
-            console.log('Waiting for MediaPipe...', waited, typeof window.Hands, typeof window.Camera);
         }
 
         if (typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') {
             console.error('MediaPipe scripts failed to load');
-            statusEl.textContent = '手势追踪不可用';
+            statusEl.textContent = '手势追踪脚本加载失败，请刷新重试';
             return;
         }
     }
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, facingMode: 'user' }
+            video: {
+                width: { ideal: CAMERA_WIDTH },
+                height: { ideal: CAMERA_HEIGHT },
+                facingMode: 'user'
+            }
         });
         videoElement.srcObject = stream;
+        videoElement.muted = true; // 静音，避免移动端自动播放被拦截
+        videoElement.playsInline = true;
         await videoElement.play();
         cameraRunning = true;
         statusEl.textContent = '摄像头就绪，正在初始化手势追踪...';
@@ -446,43 +490,53 @@ async function setupMediaPipe() {
         console.warn('Camera access failed:', err);
         let reason = '摄像头不可用，手势追踪已停用';
         if (err.name === 'NotAllowedError') {
-            reason = '摄像头权限被拒绝，请在浏览器地址栏允许摄像头后刷新页面';
+            reason = '摄像头权限被拒绝，请在浏览器设置中允许后刷新';
         } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
             reason = '未检测到可用摄像头设备';
         } else if (err.name === 'NotReadableError') {
-            reason = '摄像头被其他程序占用，请关闭占用程序后刷新';
+            reason = '摄像头被其他程序占用，请关闭后刷新';
+        } else if (err.name === 'NotSupportedError') {
+            reason = '请使用 HTTPS 访问或 Safari/Chrome 浏览器';
         }
         statusEl.textContent = reason;
         return;
     }
 
     try {
-        statusEl.textContent = '正在加载手势识别模型...';
+        statusEl.textContent = '正在加载手势识别模型（首次需下载）...';
 
         hands = new window.Hands({
-            locateFile: (file) => `https://unpkg.com/@mediapipe/hands@0.4.1675469240/${file}`
+            locateFile: (file) => `${MP_CDN}/${file}`
         });
 
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.5
+            modelComplexity: HAND_MODEL_COMPLEXITY,
+            minDetectionConfidence: HAND_MIN_DETECTION,
+            minTrackingConfidence: HAND_MIN_TRACKING,
+            selfieMode: false
         });
 
         hands.onResults(onHandResults);
 
-        const mpCamera = new window.Camera(videoElement, {
-            onFrame: async () => {
-                if (hands && cameraRunning) {
+        // 手动帧驱动循环替代 MediaPipe Camera utils，便于节流控制
+        const processFrame = async () => {
+            if (hands && cameraRunning && videoElement.readyState >= 2 && !isProcessingHandFrame) {
+                isProcessingHandFrame = true;
+                try {
                     await hands.send({ image: videoElement });
+                } catch (err) {
+                    console.warn('Hand frame error:', err);
                 }
-            },
-            width: 640,
-            height: 480
-        });
+                isProcessingHandFrame = false;
+            }
+            if (cameraRunning) {
+                // 移动端降到约 15fps，PC 保持约 30fps
+                setTimeout(processFrame, isMobileDevice ? 66 : 33);
+            }
+        };
+        processFrame();
 
-        mpCamera.start();
         statusEl.textContent = '等待手势...';
     } catch (err) {
         console.error('MediaPipe Hands loading failed:', err);
