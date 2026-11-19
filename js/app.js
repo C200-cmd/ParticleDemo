@@ -49,25 +49,27 @@ const PARTICLE_CONFIG = {
         },
         animation: (particles, time, handData) => {
             const positions = particles.geometry.attributes.position.array;
-            const velocities = particles.userData.velocities || [];
-            if (!particles.userData.velocities) {
-                particles.userData.velocities = velocities;
+            const velocities = particles.userData.velocities;
+            // 首次运行动画时初始化速度数组（createMainParticles 中创建的是空数组，不能用真值判断）
+            if (!velocities || velocities.length === 0) {
+                particles.userData.velocities = [];
                 for (let i = 0; i < positions.length / 3; i++) {
-                    velocities.push({
+                    particles.userData.velocities.push({
                         x: (Math.random() - 0.5) * 0.02,
                         y: (Math.random() - 0.5) * 0.02,
                         z: (Math.random() - 0.5) * 0.02
                     });
                 }
             }
+            const vels = particles.userData.velocities;
             for (let i = 0; i < positions.length; i += 3) {
                 const idx = i / 3;
-                positions[i] += velocities[idx].x;
-                positions[i + 1] += velocities[idx].y;
-                positions[i + 2] += velocities[idx].z;
-                if (Math.abs(positions[i]) > 6) velocities[idx].x *= -1;
-                if (Math.abs(positions[i + 1]) > 6) velocities[idx].y *= -1;
-                if (Math.abs(positions[i + 2]) > 6) velocities[idx].z *= -1;
+                positions[i] += vels[idx].x;
+                positions[i + 1] += vels[idx].y;
+                positions[i + 2] += vels[idx].z;
+                if (Math.abs(positions[i]) > 6) vels[idx].x *= -1;
+                if (Math.abs(positions[i + 1]) > 6) vels[idx].y *= -1;
+                if (Math.abs(positions[i + 2]) > 6) vels[idx].z *= -1;
             }
         }
     },
@@ -205,6 +207,12 @@ let rotationSpeed = 1;
 let targetExpansion = 1;
 let currentExpansion = 1;
 let handData = { detected: false, palmOpen: 1, position: { x: 0, y: 0 } };
+
+// 模型顺序（✌ 手势按此顺序循环切换）
+const MODEL_ORDER = ['nebula', 'fireworks', 'saturn', 'flower', 'spiral', 'galaxy'];
+const VICTORY_HOLD_FRAMES = 15; // ✌ 手势需保持的帧数（约 0.5~1 秒）
+let victoryHoldFrames = 0;       // ✌ 手势已连续保持的帧数
+let victoryLock = false;         // 触发切换后的锁，手势松开后解除
 
 // MediaPipe
 let hands, videoElement;
@@ -359,7 +367,7 @@ async function setupMediaPipe() {
 
     if (typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') {
         console.warn('MediaPipe scripts not loaded yet, waiting...');
-        statusEl.textContent = 'Loading hand tracking...';
+        statusEl.textContent = '正在加载手势追踪...';
 
         // Wait up to 10 seconds for scripts to load
         let waited = 0;
@@ -371,7 +379,7 @@ async function setupMediaPipe() {
 
         if (typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') {
             console.error('MediaPipe scripts failed to load');
-            statusEl.textContent = 'Hand tracking unavailable';
+            statusEl.textContent = '手势追踪不可用';
             return;
         }
     }
@@ -383,15 +391,23 @@ async function setupMediaPipe() {
         videoElement.srcObject = stream;
         await videoElement.play();
         cameraRunning = true;
-        statusEl.textContent = 'Camera ready, initializing hand tracking...';
+        statusEl.textContent = '摄像头就绪，正在初始化手势追踪...';
     } catch (err) {
         console.warn('Camera access failed:', err);
-        statusEl.textContent = 'Camera unavailable - tracking disabled';
+        let reason = '摄像头不可用，手势追踪已停用';
+        if (err.name === 'NotAllowedError') {
+            reason = '摄像头权限被拒绝，请在浏览器地址栏允许摄像头后刷新页面';
+        } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+            reason = '未检测到可用摄像头设备';
+        } else if (err.name === 'NotReadableError') {
+            reason = '摄像头被其他程序占用，请关闭占用程序后刷新';
+        }
+        statusEl.textContent = reason;
         return;
     }
 
     try {
-        statusEl.textContent = 'Loading hand tracking model...';
+        statusEl.textContent = '正在加载手势识别模型...';
 
         hands = new window.Hands({
             locateFile: (file) => `https://unpkg.com/@mediapipe/hands@0.4.1675469240/${file}`
@@ -417,10 +433,10 @@ async function setupMediaPipe() {
         });
 
         mpCamera.start();
-        statusEl.textContent = 'Waiting for gesture...';
+        statusEl.textContent = '等待手势...';
     } catch (err) {
         console.error('MediaPipe Hands loading failed:', err);
-        statusEl.textContent = 'Hand tracking unavailable';
+        statusEl.textContent = '手势追踪不可用';
     }
 }
 
@@ -430,7 +446,7 @@ function onHandResults(results) {
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
         handData.detected = true;
-        statusEl.textContent = 'Gesture Detected';
+        statusEl.textContent = '已检测到手势';
         statusEl.classList.add('active');
 
         // 计算手掌开合程度
@@ -458,9 +474,35 @@ function onHandResults(results) {
         // 手部位置
         handData.position.x = (palmCenter.x - 0.5) * 10;
         handData.position.y = (palmCenter.y - 0.5) * 10;
+
+        // ============== ✌ 手势：切换粒子模型 ==============
+        // 手指伸直判定：指尖到手腕的距离 > 对应指根到手腕的距离 * 1.15
+        const wrist = landmarks[0];
+        const distTo = (a) => Math.hypot(a.x - wrist.x, a.y - wrist.y, (a.z - wrist.z) || 0);
+        // 食指：根关节6、近端8  中指：根关节12、近端12... 标准索引：
+        const fingerExtended = (tipIdx, pipIdx) =>
+            distTo(landmarks[tipIdx]) > distTo(landmarks[pipIdx]) * 1.15;
+
+        const indexExt  = fingerExtended(8, 6);    // 食指伸直
+        const middleExt = fingerExtended(12, 10);   // 中指伸直
+        const ringExt   = fingerExtended(16, 14);   // 无名指伸直
+        const pinkyExt  = fingerExtended(20, 18);   // 小指伸直
+
+        const isVictory = indexExt && middleExt && !ringExt && !pinkyExt;
+
+        if (isVictory && !victoryLock) {
+            victoryHoldFrames++;
+            if (victoryHoldFrames >= VICTORY_HOLD_FRAMES) {
+                switchToNextModel();
+                victoryLock = true;
+            }
+        } else if (!isVictory) {
+            victoryHoldFrames = 0;
+            victoryLock = false;
+        }
     } else {
         handData.detected = false;
-        statusEl.textContent = 'Waiting for gesture...';
+        statusEl.textContent = '等待手势...';
         statusEl.classList.remove('active');
         targetExpansion = 1;
     }
@@ -527,6 +569,25 @@ function animate() {
     }
 }
 
+// ✌ 手势触发：按顺序切换到下一个粒子模型，并同步右侧按钮高亮
+function switchToNextModel() {
+    const idx = MODEL_ORDER.indexOf(currentModel);
+    currentModel = MODEL_ORDER[(idx + 1) % MODEL_ORDER.length];
+    createMainParticles(currentModel);
+
+    // 同步右侧面板按钮高亮
+    document.querySelectorAll('.preset-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.model === currentModel);
+    });
+
+    // 在摄像头窗口短暂提示当前模型
+    const statusEl = document.getElementById('hand-status');
+    const prevText = statusEl.textContent;
+    statusEl.textContent = '✌ 已切换：' + PARTICLE_CONFIG[currentModel].name;
+    setTimeout(() => { statusEl.textContent = '已检测到手势'; }, 1500);
+    console.log('✌ 切换模型:', PARTICLE_CONFIG[currentModel].name);
+}
+
 // ============== 事件监听 ==============
 function setupEventListeners() {
     // 窗口调整大小
@@ -589,6 +650,20 @@ function setupEventListeners() {
     // 重新打开摄像头窗口
     document.getElementById('camera-window').addEventListener('dblclick', () => {
         document.getElementById('camera-window').classList.remove('hidden');
+    });
+
+    // 手势指南侧边栏：收起与展开
+    const guidePanel = document.getElementById('guide-panel');
+    const guideToggleBtn = document.getElementById('guide-toggle-btn');
+
+    document.getElementById('guide-close-btn').addEventListener('click', () => {
+        guidePanel.classList.add('hidden');
+        guideToggleBtn.classList.add('visible');
+    });
+
+    guideToggleBtn.addEventListener('click', () => {
+        guidePanel.classList.remove('hidden');
+        guideToggleBtn.classList.remove('visible');
     });
 }
 
