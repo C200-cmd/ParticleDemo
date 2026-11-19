@@ -492,11 +492,28 @@ body {
         flex-wrap: wrap;
         gap: 12px;
         padding: 16px;
+        /* 手机端默认折叠：只露出标题，点击展开 */
+        max-height: 52px;
+        overflow: hidden;
+        cursor: pointer;
+    }
+
+    .control-panel.expanded {
+        max-height: 60vh;
+        overflow-y: auto;
     }
 
     .control-panel h2 {
         width: 100%;
         margin-bottom: 8px;
+    }
+
+    .control-panel h2::after {
+        content: '（点击展开/收起）';
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        float: right;
     }
 
     .preset-buttons {

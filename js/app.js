@@ -73,40 +73,40 @@ const PARTICLE_CONFIG = {
             }
         }
     },
-    saturn: {
-        name: '土星',
+    heart: {
+        name: '爱心',
         createPositions: (count) => {
             const positions = new Float32Array(count * 3);
-            let idx = 0;
-            // 星球主体
-            for (let i = 0; i < count * 0.6; i++) {
-                const radius = Math.random() * 1.5 + 0.3;
+            for (let i = 0; i < count; i++) {
+                // 2D 爱心参数曲线，向内随机填充形成饱满心形
                 const theta = Math.random() * Math.PI * 2;
-                const phi = Math.acos(2 * Math.random() - 1);
-                positions[idx++] = radius * Math.sin(phi) * Math.cos(theta);
-                positions[idx++] = radius * Math.sin(phi) * Math.sin(theta);
-                positions[idx++] = radius * Math.cos(phi);
-            }
-            // 环
-            for (let i = 0; i < count * 0.4; i++) {
-                const radius = Math.random() * 2 + 2;
-                const angle = Math.random() * Math.PI * 2;
-                const height = (Math.random() - 0.5) * 0.1;
-                positions[idx++] = Math.cos(angle) * radius;
-                positions[idx++] = height;
-                positions[idx++] = Math.sin(angle) * radius;
+                const shrink = Math.sqrt(Math.random()); // 偏向边缘
+                let x = 16 * Math.pow(Math.sin(theta), 3);
+                let y = 13 * Math.cos(theta) - 5 * Math.cos(2 * theta)
+                      - 2 * Math.cos(3 * theta) - Math.cos(4 * theta);
+                x *= shrink * 0.19;
+                y *= shrink * 0.19;
+                // 厚度：中心厚、边缘薄，形成立体心
+                const thickness = 1.7 * Math.sqrt(Math.max(0, 1 - shrink * shrink));
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y + 0.5;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * thickness;
             }
             return positions;
         },
         animation: (particles, time, handData) => {
             const positions = particles.geometry.attributes.position.array;
-            for (let i = 0; i < positions.length; i += 3) {
-                const x = positions[i];
-                const z = positions[i + 2];
-                const dist = Math.sqrt(x * x + z * z);
-                if (dist > 2) {
-                    positions[i + 1] = Math.sin(time * 2 + dist * 3) * 0.05;
-                }
+            // 记录初始形状，心跳基于原始位置缩放（非累积变形）
+            let base = particles.userData.basePositions;
+            if (!base) base = particles.userData.basePositions = positions.slice();
+            // 心跳节律：咚咚-停（双峰脉冲，周期约 1.3 秒）
+            const t = (time * 0.75) % 1;
+            let beat = 0;
+            if (t < 0.15) beat = Math.sin(Math.PI * t / 0.15);
+            else if (t > 0.25 && t < 0.45) beat = 0.6 * Math.sin(Math.PI * (t - 0.25) / 0.2);
+            const scale = 1 + beat * 0.12;
+            for (let i = 0; i < positions.length; i++) {
+                positions[i] = base[i] * scale;
             }
         }
     },
@@ -140,29 +140,79 @@ const PARTICLE_CONFIG = {
             }
         }
     },
-    spiral: {
-        name: '螺旋',
+    christmastree: {
+        name: '圣诞树',
         createPositions: (count) => {
             const positions = new Float32Array(count * 3);
-            for (let i = 0; i < count; i++) {
-                const t = i / count;
-                const angle = t * Math.PI * 8;
-                const radius = t * 3 + 0.5;
-                positions[i * 3] = Math.cos(angle) * radius;
-                positions[i * 3 + 1] = (t - 0.5) * 6;
-                positions[i * 3 + 2] = Math.sin(angle) * radius;
+            // 树身占 70%：从顶到底逐渐变粗的锥形螺旋
+            const treeCount = Math.floor(count * 0.7);
+            for (let i = 0; i < treeCount; i++) {
+                const t = i / treeCount;            // 0=顶 1=底
+                const angle = t * Math.PI * 14;     // 螺旋缠绕彩灯感
+                const radius = t * 1.7 + 0.08;
+                const jitter = (Math.random() - 0.5) * 0.25 * t + 0.04;
+                positions[i * 3] = Math.cos(angle) * (radius + jitter);
+                positions[i * 3 + 1] = 2.6 - t * 5.2;
+                positions[i * 3 + 2] = Math.sin(angle) * (radius + jitter);
+            }
+            // 顶部星形占 10%：五角星轮廓
+            const starCount = Math.floor(count * 0.1);
+            for (let s = 0; s < starCount; s++) {
+                const pointIdx = Math.floor(Math.random() * 5);
+                const outer = 0.55;
+                const inner = outer * 0.42;
+                const aOut = (pointIdx / 5) * Math.PI * 2 - Math.PI / 2;
+                const aIn = aOut + Math.PI / 5;
+                const f = Math.random(); // 在角点与内点之间插值
+                const r = inner + (outer - inner) * f;
+                const a = aIn + (aOut - aIn) * (Math.random() < 0.5 ? 0 : 1) + (Math.random() - 0.5) * 0.25;
+                positions[(treeCount + s) * 3] = Math.cos(a) * r * (f * 0.6 + 0.4);
+                positions[(treeCount + s) * 3 + 1] = 3.3 + Math.sin(a) * r;
+                positions[(treeCount + s) * 3 + 2] = Math.sin(a) * r * (f * 0.6 + 0.4) * 0.3;
+            }
+            // 落雪占 20%：树周围的雪花
+            for (let s = 0; s < count - treeCount - starCount; s++) {
+                const idx = treeCount + starCount + s;
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 2 + Math.random() * 3;
+                positions[idx * 3] = Math.cos(angle) * radius;
+                positions[idx * 3 + 1] = (Math.random() - 0.5) * 8;
+                positions[idx * 3 + 2] = Math.sin(angle) * radius;
             }
             return positions;
         },
         animation: (particles, time, handData) => {
             const positions = particles.geometry.attributes.position.array;
             const count = positions.length / 3;
-            for (let i = 0; i < count; i++) {
-                const t = i / count;
-                const angle = t * Math.PI * 8 + time * 0.5;
-                const radius = t * 3 + 0.5;
-                positions[i * 3] = Math.cos(angle) * radius;
-                positions[i * 3 + 2] = Math.sin(angle) * radius;
+            const treeCount = Math.floor(count * 0.7);
+            const starCount = Math.floor(count * 0.1);
+            const snowCount = count - treeCount - starCount;
+            // 记录树与星星的初始位置（雪花单独处理）
+            if (!particles.userData.snowBase) {
+                particles.userData.snowBase = true;
+            }
+            // 星星闪烁：顶部星微幅缩放
+            let starBase = particles.userData.starBase;
+            if (!starBase) starBase = particles.userData.starBase = positions.slice(treeCount * 3, (treeCount + starCount) * 3);
+            const twinkle = 1 + Math.sin(time * 3) * 0.12;
+            for (let s = 0; s < starCount; s++) {
+                positions[(treeCount + s) * 3] = starBase[s * 3] * twinkle;
+                positions[(treeCount + s) * 3 + 1] = starBase[s * 3 + 1] + (starBase[s * 3 + 1] - 3.3) * (twinkle - 1);
+                positions[(treeCount + s) * 3 + 2] = starBase[s * 3 + 2] * twinkle;
+            }
+            // 雪花缓慢飘落 + 水平摆动，落到底部回到顶部
+            let snowXZ = particles.userData.snowXZ;
+            if (!snowXZ) snowXZ = particles.userData.snowXZ = [];
+            for (let s = 0; s < snowCount; s++) {
+                if (!snowXZ[s]) {
+                    snowXZ[s] = { x: positions[(treeCount + starCount + s) * 3], z: positions[(treeCount + starCount + s) * 3 + 1] };
+                }
+                const idx = treeCount + starCount + s;
+                let y = positions[idx * 3 + 1] - 0.25 - (s % 3) * 0.03; // 不同的雪花速度不同
+                if (y < -4.5) y = 4.5;
+                positions[idx * 3 + 1] = y;
+                positions[idx * 3] = snowXZ[s].x + Math.sin(time * 1.2 + s) * 0.25;
+                positions[idx * 3 + 2] = snowXZ[s].z + Math.cos(time + s * 0.7) * 0.2;
             }
         }
     },
@@ -209,7 +259,7 @@ let currentExpansion = 1;
 let handData = { detected: false, palmOpen: 1, position: { x: 0, y: 0 } };
 
 // 模型顺序（✌ 手势按此顺序循环切换）
-const MODEL_ORDER = ['nebula', 'fireworks', 'saturn', 'flower', 'spiral', 'galaxy'];
+const MODEL_ORDER = ['nebula', 'fireworks', 'heart', 'flower', 'christmastree', 'galaxy'];
 const VICTORY_HOLD_FRAMES = 15; // ✌ 手势需保持的帧数（约 0.5~1 秒）
 let victoryHoldFrames = 0;       // ✌ 手势已连续保持的帧数
 let victoryLock = false;         // 触发切换后的锁，手势松开后解除
@@ -664,6 +714,16 @@ function setupEventListeners() {
     guideToggleBtn.addEventListener('click', () => {
         guidePanel.classList.remove('hidden');
         guideToggleBtn.classList.remove('visible');
+    });
+
+    // 手机端控制面板：点击标题栏展开/收起（点按钮和滑块本身不触发）
+    const controlPanel = document.querySelector('.control-panel');
+    controlPanel.addEventListener('click', (e) => {
+        if (window.matchMedia('(max-width: 768px)').matches) {
+            // 点击的是控件（按钮/滑块/颜色选择）时不折叠，避免误触
+            if (e.target.closest('.preset-btn, input')) return;
+            controlPanel.classList.toggle('expanded');
+        }
     });
 }
 
