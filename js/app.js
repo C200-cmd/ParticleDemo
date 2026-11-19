@@ -420,8 +420,8 @@ const HAND_MODEL_COMPLEXITY = isMobileDevice ? 0 : 1; // 0=lite模型快 1=完�
 const HAND_MIN_DETECTION = isMobileDevice ? 0.5 : 0.7;
 const HAND_MIN_TRACKING = isMobileDevice ? 0.4 : 0.5;
 
-// MediaPipe CDN：优先 jsdelivr（国内手机网络更快），unpkg 作为兜底
-const MP_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240';
+// MediaPipe 文件路径：全部本地托管，加载快且不依赖外部 CDN
+const MP_CDN = 'libs/mediapipe';
 
 // 帧处理节流：防止手机端帧堆积
 let isProcessingHandFrame = false;
@@ -453,19 +453,19 @@ async function _setupMediaPipeCore() {
     // Check if MediaPipe is loaded
     console.log('Checking MediaPipe...', typeof window.Hands, typeof window.Camera);
 
-    if (typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') {
+    if (typeof window.Hands === 'undefined') {
         console.warn('MediaPipe scripts not loaded yet, waiting...');
         statusEl.textContent = '正在加载手势追踪...';
 
         // 等待脚本加载，移动端给更长时间
         let waited = 0;
         const maxWait = isMobileDevice ? 15000 : 10000;
-        while ((typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') && waited < maxWait) {
+        while (typeof window.Hands === 'undefined' && waited < maxWait) {
             await new Promise(r => setTimeout(r, 500));
             waited += 500;
         }
 
-        if (typeof window.Hands === 'undefined' || typeof window.Camera === 'undefined') {
+        if (typeof window.Hands === 'undefined') {
             console.error('MediaPipe scripts failed to load');
             statusEl.textContent = '手势追踪脚本加载失败，请刷新重试';
             return;
